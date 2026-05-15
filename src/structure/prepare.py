@@ -337,14 +337,12 @@ def _select_bdamage_atoms(
     add_component_names = _normalize_component_name_set(options.add_component_names)
 
     for atom in atoms:
-        if _should_remove_from_selection(atom, options, remove_component_names):
-            continue
-
-        if _is_default_bdamage_selection(atom, options):
-            _append_selected_atom(atom, selected_atoms, selected_keys)
-
-    for atom in atoms:
-        if _should_force_add_to_selection(atom, options, add_component_names):
+        if _should_select_bdamage_atom(
+            atom,
+            options,
+            remove_component_names,
+            add_component_names,
+        ):
             _append_selected_atom(atom, selected_atoms, selected_keys)
 
     return tuple(selected_atoms)
@@ -397,46 +395,36 @@ def _is_default_bdamage_selection(
     return False
 
 
-def _should_remove_from_selection(
+def _should_select_bdamage_atom(
     atom: PreparedAtom,
     options: StructurePreparationOptions,
     remove_component_names: frozenset[str],
+    add_component_names: frozenset[str],
 ) -> bool:
     """
-    Return True if an atom should be excluded from BDamage selection.
+    Return True if an atom should be selected for BDamage calculation.
+
+    Selection precedence is:
+        atom serial remove > atom serial add > component remove >
+        component add > default selection.
     """
 
     atom_serial = atom.record.atom_serial
     component_name = atom.record.residue_name.strip().upper()
 
     if atom_serial is not None and atom_serial in options.remove_atom_serials:
-        return True
-
-    if component_name in remove_component_names:
-        return True
-
-    return False
-
-
-def _should_force_add_to_selection(
-    atom: PreparedAtom,
-    options: StructurePreparationOptions,
-    add_component_names: frozenset[str],
-) -> bool:
-    """
-    Return True if an atom should be force-added to BDamage selection.
-    """
-
-    atom_serial = atom.record.atom_serial
-    component_name = atom.record.residue_name.strip().upper()
+        return False
 
     if atom_serial is not None and atom_serial in options.add_atom_serials:
         return True
 
+    if component_name in remove_component_names:
+        return False
+
     if component_name in add_component_names:
         return True
 
-    return False
+    return _is_default_bdamage_selection(atom, options)
 
 
 def _append_selected_atom(
