@@ -25,8 +25,15 @@ class StructureReadError(InputResolutionError):
 
 @dataclass(frozen=True)
 class AtomRecord:
-    """One atom record read from a structure file."""
+    """
+    One atom record read from a structure file.
 
+    source_atom_index:
+        Zero-based index assigned by reader.py in the order atoms are read.
+        Used internally for stable atom identity and deduplication.
+    """
+
+    source_atom_index: int
     model_number: int
     chain_id: str
     residue_name: str
@@ -136,6 +143,7 @@ def _extract_atom_records(structure: gemmi.Structure) -> list[AtomRecord]:
 
                     atom_records.append(
                         AtomRecord(
+                            source_atom_index=len(atom_records),
                             model_number=model_index,
                             chain_id=chain_id,
                             residue_name=residue_name,

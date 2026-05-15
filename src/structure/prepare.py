@@ -331,7 +331,7 @@ def _select_bdamage_atoms(
     """
 
     selected_atoms: list[PreparedAtom] = []
-    selected_keys: set[tuple[object, ...]] = set()
+    selected_keys: set[int] = set()
 
     remove_component_names = _normalize_component_name_set(options.remove_component_names)
     add_component_names = _normalize_component_name_set(options.add_component_names)
@@ -442,7 +442,7 @@ def _should_force_add_to_selection(
 def _append_selected_atom(
     atom: PreparedAtom,
     selected_atoms: list[PreparedAtom],
-    selected_keys: set[tuple[object, ...]],
+    selected_keys: set[int],
 ) -> None:
     """
     Append an atom to the selected list if it is not already present.
@@ -540,22 +540,9 @@ def _format_residue_label(atom: AtomRecord) -> str:
     return f"chain {chain_id} residue {residue_name}{residue_number}{insertion_code}"
 
 
-def _prepared_atom_key(atom: PreparedAtom) -> tuple[object, ...]:
+def _prepared_atom_key(atom: PreparedAtom) -> int:
     """
-    Return a key representing a prepared atom.
+    Return a stable key representing a prepared atom.
     """
 
-    record = atom.record
-
-    return (
-        record.model_number,
-        record.chain_id,
-        record.residue_name.strip().upper(),
-        record.residue_number,
-        record.insertion_code.strip(),
-        record.atom_name.strip().upper(),
-        record.altloc.strip(),
-        record.x,
-        record.y,
-        record.z,
-    )
+    return atom.record.source_atom_index
