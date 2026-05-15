@@ -1,6 +1,0 @@
-input/
-  __init__.py
-  resolver.py      # done
-  rcsb.py          # done
-  reader.py        # next
-  validation.py    # later, maybe optional
