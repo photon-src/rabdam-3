@@ -240,7 +240,12 @@ def _clean_altloc(altloc: str) -> str:
     if altloc is None:
         return ""
 
-    return str(altloc).strip()
+    cleaned = str(altloc).replace("\x00", "").strip()
+
+    if cleaned in {".", "?"}:
+        return ""
+
+    return cleaned
 
 
 def _get_record_type(residue: gemmi.Residue) -> str:
