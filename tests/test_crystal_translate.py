@@ -46,6 +46,14 @@ def make_expanded_structure(
 
 
 class CrystalTranslateTests(unittest.TestCase):
+    def assert_coordinates_almost_equal(
+        self,
+        actual: tuple[float, float, float],
+        expected: tuple[float, float, float],
+    ) -> None:
+        for actual_value, expected_value in zip(actual, expected):
+            self.assertAlmostEqual(actual_value, expected_value)
+
     def test_orthogonal_translation_vectors(self) -> None:
         vectors = unit_cell_translation_vectors(
             UnitCellParameters(
@@ -58,9 +66,18 @@ class CrystalTranslateTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(is_close_tuple((vectors.a.x, vectors.a.y, vectors.a.z), (10.0, 0.0, 0.0)))
-        self.assertTrue(is_close_tuple((vectors.b.x, vectors.b.y, vectors.b.z), (0.0, 20.0, 0.0)))
-        self.assertTrue(is_close_tuple((vectors.c.x, vectors.c.y, vectors.c.z), (0.0, 0.0, 30.0)))
+        self.assert_coordinates_almost_equal(
+            (vectors.a.x, vectors.a.y, vectors.a.z),
+            (10.0, 0.0, 0.0),
+        )
+        self.assert_coordinates_almost_equal(
+            (vectors.b.x, vectors.b.y, vectors.b.z),
+            (0.0, 20.0, 0.0),
+        )
+        self.assert_coordinates_almost_equal(
+            (vectors.c.x, vectors.c.y, vectors.c.z),
+            (0.0, 0.0, 30.0),
+        )
 
     def test_skewed_translation_vectors_match_rabdam2_formula(self) -> None:
         unit_cell = UnitCellParameters(
@@ -89,7 +106,10 @@ class CrystalTranslateTests(unittest.TestCase):
             unit_cell.c * (v / math.sin(gamma)),
         )
 
-        self.assertTrue(is_close_tuple((vectors.c.x, vectors.c.y, vectors.c.z), expected_c))
+        self.assert_coordinates_almost_equal(
+            (vectors.c.x, vectors.c.y, vectors.c.z),
+            expected_c,
+        )
 
     def test_translate_expanded_unit_cell_generates_27_copies_by_default(self) -> None:
         block = translate_expanded_unit_cell(make_expanded_structure())
@@ -160,7 +180,10 @@ class CrystalTranslateTests(unittest.TestCase):
             c_offset=1,
         )
 
-        self.assertTrue(is_close_tuple((shift.x, shift.y, shift.z), (10.0, -20.0, 30.0)))
+        self.assert_coordinates_almost_equal(
+            (shift.x, shift.y, shift.z),
+            (10.0, -20.0, 30.0),
+        )
 
     def test_empty_atom_list_raises(self) -> None:
         with self.assertRaises(CrystalTranslationError):
@@ -171,6 +194,45 @@ class CrystalTranslateTests(unittest.TestCase):
             translate_expanded_unit_cell(
                 make_expanded_structure(),
                 translation_range=-1,
+            )
+
+    def test_invalid_unit_cell_length_raises(self) -> None:
+        with self.assertRaisesRegex(CrystalTranslationError, "unit-cell lengths"):
+            unit_cell_translation_vectors(
+                UnitCellParameters(
+                    a=0.0,
+                    b=20.0,
+                    c=30.0,
+                    alpha=90.0,
+                    beta=90.0,
+                    gamma=90.0,
+                )
+            )
+
+    def test_invalid_unit_cell_angle_raises(self) -> None:
+        with self.assertRaisesRegex(CrystalTranslationError, "unit-cell angles"):
+            unit_cell_translation_vectors(
+                UnitCellParameters(
+                    a=10.0,
+                    b=20.0,
+                    c=30.0,
+                    alpha=90.0,
+                    beta=180.0,
+                    gamma=90.0,
+                )
+            )
+
+    def test_invalid_unit_cell_geometry_raises(self) -> None:
+        with self.assertRaisesRegex(CrystalTranslationError, "unit-cell geometry"):
+            unit_cell_translation_vectors(
+                UnitCellParameters(
+                    a=10.0,
+                    b=20.0,
+                    c=30.0,
+                    alpha=10.0,
+                    beta=10.0,
+                    gamma=170.0,
+                )
             )
 
 
