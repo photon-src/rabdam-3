@@ -284,6 +284,30 @@ class CrystalTrimTests(unittest.TestCase):
                 -1.0,
             )
 
+    def test_trim_negative_padding_raises(self) -> None:
+        reference_atoms = (make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),)
+        translated_block = make_translated_block(
+            (make_translated_atom(translated_atom_index=1, x=0.0, y=0.0, z=0.0),)
+        )
+
+        with self.assertRaises(CrystalTrimError):
+            trim_translated_block_to_reference_atoms(
+                translated_block=translated_block,
+                reference_atoms=reference_atoms,
+                padding=-1.0,
+            )
+
+    def test_empty_translated_block_raises(self) -> None:
+        reference_atoms = (make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),)
+        translated_block = make_translated_block(())
+
+        with self.assertRaises(CrystalTrimError):
+            trim_translated_block_to_reference_atoms(
+                translated_block=translated_block,
+                reference_atoms=reference_atoms,
+                padding=1.0,
+            )
+
     def test_trimmed_empty_result_raises(self) -> None:
         reference_atoms = (make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),)
         translated_block = make_translated_block(
