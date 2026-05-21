@@ -135,7 +135,7 @@ def calculate_packing_density(
             packing_density_atom_index=selected_atom_index,
             source_atom_index=selected_atom.record.source_atom_index,
             atom_serial=selected_atom.record.atom_serial,
-            neighbour_count=count_neighbours_within_threshold_squared(
+            neighbour_count=_count_neighbours_within_threshold_squared(
                 selected_atom=selected_atom,
                 neighbour_atoms=neighbour_atom_tuple,
                 threshold_squared=threshold_squared,
@@ -153,7 +153,7 @@ def calculate_packing_density(
     )
 
 
-def count_neighbours_within_threshold_squared(
+def _count_neighbours_within_threshold_squared(
     *,
     selected_atom: PreparedAtom,
     neighbour_atoms: Iterable[TranslatedAtom],

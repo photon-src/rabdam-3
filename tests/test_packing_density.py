@@ -14,9 +14,9 @@ from input.reader import AtomRecord, StructureMetadata
 from input.resolver import StructureFileFormat
 from packing.density import (
     PackingDensityError,
+    _count_neighbours_within_threshold_squared,
     calculate_bdamage_packing_density,
     calculate_packing_density,
-    count_neighbours_within_threshold_squared,
     packing_density_counts_as_tuple,
     squared_distance_to_translated_atom,
 )
@@ -181,7 +181,7 @@ class PackingDensityTests(unittest.TestCase):
             make_translated_atom(translated_atom_index=3, x=5.1, y=0.0, z=0.0),
         )
 
-        count = count_neighbours_within_threshold_squared(
+        count = _count_neighbours_within_threshold_squared(
             selected_atom=selected_atom,
             neighbour_atoms=neighbours,
             threshold_squared=25.0,
@@ -286,7 +286,7 @@ class PackingDensityTests(unittest.TestCase):
 
     def test_negative_threshold_squared_raises(self) -> None:
         with self.assertRaises(PackingDensityError):
-            count_neighbours_within_threshold_squared(
+            _count_neighbours_within_threshold_squared(
                 selected_atom=make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
                 neighbour_atoms=(),
                 threshold_squared=-1.0,
@@ -296,7 +296,7 @@ class PackingDensityTests(unittest.TestCase):
         for threshold_squared in (math.nan, math.inf, -math.inf):
             with self.subTest(threshold_squared=threshold_squared):
                 with self.assertRaises(PackingDensityError):
-                    count_neighbours_within_threshold_squared(
+                    _count_neighbours_within_threshold_squared(
                         selected_atom=make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
                         neighbour_atoms=(),
                         threshold_squared=threshold_squared,
