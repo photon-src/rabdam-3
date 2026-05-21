@@ -77,6 +77,7 @@ def prepare_structure(
         cleaned_atom_count=len(prepared_atoms),
         selected_atom_count=len(selected_atoms),
         removed_hydrogen_count=filter_result.counts.hydrogen,
+        removed_invalid_coordinate_count=filter_result.counts.invalid_coordinates,
         removed_invalid_occupancy_count=filter_result.counts.invalid_occupancy,
         removed_invalid_b_factor_count=filter_result.counts.invalid_b_factor,
         removed_altloc_count=altloc_result.removed_count,

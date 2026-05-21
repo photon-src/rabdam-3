@@ -242,6 +242,7 @@ class CrystalTrimTests(unittest.TestCase):
                 cleaned_atom_count=2,
                 selected_atom_count=1,
                 removed_hydrogen_count=0,
+                removed_invalid_coordinate_count=0,
                 removed_invalid_occupancy_count=0,
                 removed_invalid_b_factor_count=0,
                 removed_altloc_count=0,

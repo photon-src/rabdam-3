@@ -3,12 +3,14 @@ Basic atom-cleaning filters for RABDAM structure preparation.
 
 This module performs only the first cleaning pass:
     - remove hydrogens/deuteriums
+    - remove atoms with non-finite Cartesian coordinates
     - remove atoms with invalid occupancy
     - remove atoms with non-positive B-factors
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+import math
 
 from input.reader import AtomRecord
 
@@ -18,6 +20,7 @@ class AtomFilterCounts:
     """Counts of atoms removed by the basic cleaning pass."""
 
     hydrogen: int = 0
+    invalid_coordinates: int = 0
     invalid_occupancy: int = 0
     invalid_b_factor: int = 0
 
@@ -45,12 +48,17 @@ def filter_clean_atoms(
     kept_atoms: list[AtomRecord] = []
 
     removed_hydrogen_count = 0
+    removed_invalid_coordinate_count = 0
     removed_invalid_occupancy_count = 0
     removed_invalid_b_factor_count = 0
 
     for atom in atoms:
         if remove_hydrogens and is_hydrogen(atom):
             removed_hydrogen_count += 1
+            continue
+
+        if not has_finite_coordinates(atom):
+            removed_invalid_coordinate_count += 1
             continue
 
         if require_valid_occupancy and not has_valid_occupancy(atom):
@@ -65,6 +73,7 @@ def filter_clean_atoms(
 
     counts = AtomFilterCounts(
         hydrogen=removed_hydrogen_count,
+        invalid_coordinates=removed_invalid_coordinate_count,
         invalid_occupancy=removed_invalid_occupancy_count,
         invalid_b_factor=removed_invalid_b_factor_count,
     )
@@ -88,6 +97,18 @@ def is_hydrogen(atom: AtomRecord) -> bool:
     atom_name = atom.atom_name.strip().upper()
 
     return atom_name.startswith(("H", "D"))
+
+
+def has_finite_coordinates(atom: AtomRecord) -> bool:
+    """
+    Return True if all Cartesian coordinates are finite numbers.
+    """
+
+    return (
+        math.isfinite(atom.x)
+        and math.isfinite(atom.y)
+        and math.isfinite(atom.z)
+    )
 
 
 def has_valid_occupancy(atom: AtomRecord) -> bool:

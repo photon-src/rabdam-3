@@ -143,6 +143,7 @@ def make_prepared_structure(selected_atoms: tuple[PreparedAtom, ...]) -> Prepare
             cleaned_atom_count=len(selected_atoms),
             selected_atom_count=len(selected_atoms),
             removed_hydrogen_count=0,
+            removed_invalid_coordinate_count=0,
             removed_invalid_occupancy_count=0,
             removed_invalid_b_factor_count=0,
             removed_altloc_count=0,

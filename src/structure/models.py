@@ -61,6 +61,7 @@ class StructurePreparationReport:
     cleaned_atom_count: int
     selected_atom_count: int
     removed_hydrogen_count: int
+    removed_invalid_coordinate_count: int
     removed_invalid_occupancy_count: int
     removed_invalid_b_factor_count: int
     removed_altloc_count: int
