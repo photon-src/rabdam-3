@@ -21,6 +21,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 import math
 
+import numpy as np
+
 from packing.density import PackingDensityAtomResult, PackingDensityResult
 from structure.models import PreparedAtom, PreparedStructure
 
@@ -368,11 +370,29 @@ def centered_window_average_b_factors(
     sorted_input_tuple = tuple(sorted_atom_inputs)
     validate_window_size(window_size=window_size, atom_count=len(sorted_input_tuple))
 
-    b_factors = tuple(atom_input.b_factor for atom_input in sorted_input_tuple)
+    b_factors = np.asarray(
+        [atom_input.b_factor for atom_input in sorted_input_tuple],
+        dtype=np.float64,
+    )
     half_window = math.floor(window_size / 2)
 
-    first_window_average = mean(b_factors[0:window_size])
-    last_window_average = mean(b_factors[len(b_factors) - window_size : len(b_factors)])
+    if not np.all(np.isfinite(b_factors)):
+        raise BDamageScoreError("Cannot calculate the mean of non-finite values.")
+
+    prefix_sums = np.empty(len(b_factors) + 1, dtype=np.float64)
+    prefix_sums[0] = 0.0
+    np.cumsum(b_factors, out=prefix_sums[1:])
+
+    first_window_average = _window_average_from_prefix_sums(
+        prefix_sums,
+        start=0,
+        window_size=window_size,
+    )
+    last_window_average = _window_average_from_prefix_sums(
+        prefix_sums,
+        start=len(b_factors) - window_size,
+        window_size=window_size,
+    )
 
     averages: list[float] = []
     for index in range(len(b_factors)):
@@ -385,23 +405,26 @@ def centered_window_average_b_factors(
             continue
 
         start = index - half_window
-        stop = start + window_size
-        averages.append(mean(b_factors[start:stop]))
+        averages.append(
+            _window_average_from_prefix_sums(
+                prefix_sums,
+                start=start,
+                window_size=window_size,
+            )
+        )
 
     return tuple(averages)
 
 
-def mean(values: Iterable[float]) -> float:
-    """Return the arithmetic mean of finite values."""
+def _window_average_from_prefix_sums(
+    prefix_sums: np.ndarray,
+    *,
+    start: int,
+    window_size: int,
+) -> float:
+    """Return one fixed-size window average from cumulative B-factor sums."""
 
-    value_tuple = tuple(values)
-    if not value_tuple:
-        raise BDamageScoreError("Cannot calculate the mean of an empty sequence.")
-
-    if not all(math.isfinite(value) for value in value_tuple):
-        raise BDamageScoreError("Cannot calculate the mean of non-finite values.")
-
-    average = float(sum(value_tuple) / len(value_tuple))
+    average = float((prefix_sums[start + window_size] - prefix_sums[start]) / window_size)
     if average <= 0:
         raise BDamageScoreError(
             f"Average B-factor must be positive, got {average!r}."

@@ -129,6 +129,35 @@ class BDamageScoreTests(unittest.TestCase):
 
         self.assertEqual(averages, (20.0, 20.0, 30.0, 40.0, 40.0))
 
+    def test_centered_window_average_b_factors_uses_prefix_sum_window_ranges(self) -> None:
+        inputs = tuple(
+            make_atom_input(
+                bdamage_atom_index=index,
+                source_atom_index=index - 1,
+                atom_serial=index,
+                b_factor=float(index),
+                packing_density=index,
+            )
+            for index in range(1, 10)
+        )
+
+        averages = centered_window_average_b_factors(inputs, window_size=5)
+
+        self.assertEqual(
+            averages,
+            (
+                3.0,
+                3.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+                7.0,
+                7.0,
+                7.0,
+            ),
+        )
+
     def test_even_window_size_raises(self) -> None:
         inputs = tuple(
             make_atom_input(
