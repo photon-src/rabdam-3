@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 import gemmi
+import numpy as np
 
 from input.reader import StructureMetadata
 from structure.models import PreparedAtom, PreparedStructure
@@ -120,32 +122,35 @@ def expand_atoms_by_symmetry(
             f"Space group {metadata.space_group!r} has no symmetry operations."
         )
 
+    expanded_coordinates = _symmetry_expanded_coordinates(
+        atoms=atom_tuple,
+        gemmi_cell=gemmi_cell,
+        operations=operations,
+    )
+    operation_triplets = tuple(operation.triplet() for operation in operations)
+    operation_identity_flags = tuple(
+        operation_triplet.replace(" ", "") == "x,y,z"
+        for operation_triplet in operation_triplets
+    )
+
     expanded_atoms: list[SymmetryExpandedAtom] = []
-
-    # The order is deterministic. The exact order is not used by the packing
-    # density calculation, but keeping it stable helps output/debug tests.
-    for atom in atom_tuple:
-        fractional = gemmi_cell.fractionalize(
-            gemmi.Position(atom.record.x, atom.record.y, atom.record.z)
-        )
-
-        for operation_index, operation in enumerate(operations, start=1):
-            transformed = apply_operation_without_wrapping(operation, fractional)
-            cartesian = gemmi_cell.orthogonalize(transformed)
-            operation_triplet = operation.triplet()
-
+    for atom_index, atom in enumerate(atom_tuple):
+        for operation_index, coordinates in enumerate(
+            expanded_coordinates[atom_index],
+            start=1,
+        ):
             expanded_atoms.append(
                 SymmetryExpandedAtom(
                     unit_cell_atom_index=len(expanded_atoms) + 1,
                     source_atom_index=atom.record.source_atom_index,
                     symmetry_operation_index=operation_index,
-                    symmetry_operation=operation_triplet,
+                    symmetry_operation=operation_triplets[operation_index - 1],
                     is_identity_symmetry_operation=(
-                        operation_triplet.replace(" ", "") == "x,y,z"
+                        operation_identity_flags[operation_index - 1]
                     ),
-                    x=float(cartesian.x),
-                    y=float(cartesian.y),
-                    z=float(cartesian.z),
+                    x=float(coordinates[0]),
+                    y=float(coordinates[1]),
+                    z=float(coordinates[2]),
                 )
             )
 
@@ -154,6 +159,70 @@ def expand_atoms_by_symmetry(
         unit_cell=unit_cell,
         space_group_name=space_group.hm,
         operation_count=len(operations),
+    )
+
+
+def _symmetry_expanded_coordinates(
+    *,
+    atoms: tuple[PreparedAtom, ...],
+    gemmi_cell: gemmi.UnitCell,
+    operations: tuple[gemmi.Op, ...],
+) -> np.ndarray:
+    """
+    Return atom-major, operation-major symmetry-expanded Cartesian coordinates.
+    """
+
+    cartesian_coordinates = np.asarray(
+        [(atom.record.x, atom.record.y, atom.record.z) for atom in atoms],
+        dtype=np.float64,
+    )
+    fractionalization_matrix = _gemmi_transform_matrix(gemmi_cell.frac)
+    fractionalization_vector = _gemmi_transform_vector(gemmi_cell.frac)
+    orthogonalization_matrix = _gemmi_transform_matrix(gemmi_cell.orth)
+    orthogonalization_vector = _gemmi_transform_vector(gemmi_cell.orth)
+
+    fractional_coordinates = (
+        cartesian_coordinates @ fractionalization_matrix.T
+        + fractionalization_vector
+    )
+    operation_rotations = np.asarray(
+        [
+            np.asarray(operation.rot, dtype=np.float64) / operation.DEN
+            for operation in operations
+        ],
+        dtype=np.float64,
+    )
+    operation_translations = np.asarray(
+        [
+            np.asarray(operation.tran, dtype=np.float64) / operation.DEN
+            for operation in operations
+        ],
+        dtype=np.float64,
+    )
+
+    transformed_fractional_coordinates = (
+        np.einsum("ni,mji->nmj", fractional_coordinates, operation_rotations)
+        + operation_translations[np.newaxis, :, :]
+    )
+
+    return (
+        transformed_fractional_coordinates @ orthogonalization_matrix.T
+        + orthogonalization_vector
+    )
+
+
+def _gemmi_transform_matrix(transform: Any) -> np.ndarray:
+    """Return a Gemmi Transform matrix as a float64 NumPy array."""
+
+    return np.asarray(transform.mat.tolist(), dtype=np.float64)
+
+
+def _gemmi_transform_vector(transform: Any) -> np.ndarray:
+    """Return a Gemmi Transform translation vector as a float64 NumPy array."""
+
+    return np.asarray(
+        (transform.vec.x, transform.vec.y, transform.vec.z),
+        dtype=np.float64,
     )
 
 

@@ -171,6 +171,52 @@ class CrystalSymmetryTests(unittest.TestCase):
             ((expected.x, expected.y, expected.z),),
         )
 
+    def test_vectorized_expansion_matches_gemmi_reference_order(self) -> None:
+        metadata = make_metadata(
+            space_group="P 21 21 21",
+            unit_cell_a=10.0,
+            unit_cell_b=12.0,
+            unit_cell_c=14.0,
+            unit_cell_alpha=90.0,
+            unit_cell_beta=100.0,
+            unit_cell_gamma=90.0,
+        )
+        atoms = (
+            make_prepared_atom(source_atom_index=0, x=1.0, y=2.0, z=3.0),
+            make_prepared_atom(source_atom_index=1, x=4.0, y=5.0, z=6.0),
+        )
+
+        expanded = expand_atoms_by_symmetry(atoms=atoms, metadata=metadata)
+
+        cell = gemmi.UnitCell(10.0, 12.0, 14.0, 90.0, 100.0, 90.0)
+        operations = tuple(gemmi.find_spacegroup_by_name("P 21 21 21").operations())
+        expected_coordinates = []
+        expected_source_atom_indices = []
+        expected_operation_indices = []
+        for atom in atoms:
+            fractional = cell.fractionalize(
+                gemmi.Position(atom.record.x, atom.record.y, atom.record.z)
+            )
+            for operation_index, operation in enumerate(operations, start=1):
+                transformed = apply_operation_without_wrapping(operation, fractional)
+                cartesian = cell.orthogonalize(transformed)
+                expected_coordinates.append((cartesian.x, cartesian.y, cartesian.z))
+                expected_source_atom_indices.append(atom.record.source_atom_index)
+                expected_operation_indices.append(operation_index)
+
+        self.assertEqual(
+            tuple(atom.source_atom_index for atom in expanded.atoms),
+            tuple(expected_source_atom_indices),
+        )
+        self.assertEqual(
+            tuple(atom.symmetry_operation_index for atom in expanded.atoms),
+            tuple(expected_operation_indices),
+        )
+        self.assert_coordinates_almost_equal(
+            coordinates_as_tuples(expanded),
+            tuple(expected_coordinates),
+        )
+
     def test_applies_operation_without_wrapping_values_into_unit_cell(self) -> None:
         transformed = apply_operation_without_wrapping(
             gemmi.Op("x+1,y,z"),
