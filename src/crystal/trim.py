@@ -24,7 +24,16 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from crystal.translate import TranslatedAtom, TranslatedCrystalBlock
+import numpy as np
+
+from crystal.symmetry import SymmetryExpandedStructure
+from crystal.translate import (
+    TranslatedAtom,
+    TranslatedCrystalBlock,
+    UnitCellTranslationVectors,
+    translation_vector_for_offsets,
+    unit_cell_translation_vectors,
+)
 from structure.models import PreparedAtom, PreparedStructure
 
 
@@ -79,6 +88,44 @@ class TrimmedCrystalBlock:
     padding: float
     original_atom_count: int
 
+    @property
+    def atom_count(self) -> int:
+        """Number of retained translated atoms."""
+
+        return len(self.atoms)
+
+
+@dataclass(frozen=True)
+class ArrayTrimmedCrystalBlock:
+    """
+    NumPy-backed translated crystal block after neighbour-box trimming.
+
+    The full translated 3x3x3 block is never materialized. Coordinates and the
+    metadata needed by packing-density self-copy correction are retained only
+    for atoms inside the padded reference bounds.
+    """
+
+    coordinates: np.ndarray
+    source_atom_indices: np.ndarray
+    is_identity_symmetry_operation: np.ndarray
+    translation_offsets: np.ndarray
+    reference_bounds: CartesianBounds
+    trim_bounds: CartesianBounds
+    padding: float
+    original_atom_count: int
+    translation_vectors: UnitCellTranslationVectors
+    translation_range: int
+    source_unit_cell_atom_count: int
+
+    @property
+    def atom_count(self) -> int:
+        """Number of retained translated atoms."""
+
+        return int(self.coordinates.shape[0])
+
+
+TrimmedNeighbourBlock = TrimmedCrystalBlock | ArrayTrimmedCrystalBlock
+
 
 def trim_translated_block_for_bdamage(
     *,
@@ -96,6 +143,136 @@ def trim_translated_block_for_bdamage(
         translated_block=translated_block,
         reference_atoms=prepared_structure.selected_atoms,
         padding=padding,
+    )
+
+
+def trim_expanded_unit_cell_for_bdamage(
+    *,
+    expanded_structure: SymmetryExpandedStructure,
+    prepared_structure: PreparedStructure,
+    padding: float,
+    translation_range: int = 1,
+) -> ArrayTrimmedCrystalBlock:
+    """
+    Fused translation and trimming for BDamage packing-density calculation.
+
+    This uses prepared_structure.selected_atoms as the reference atoms and
+    avoids constructing TranslatedAtom objects for atoms outside the trim box.
+    """
+
+    return trim_expanded_unit_cell_to_reference_atoms(
+        expanded_structure=expanded_structure,
+        reference_atoms=prepared_structure.selected_atoms,
+        padding=padding,
+        translation_range=translation_range,
+    )
+
+
+def trim_expanded_unit_cell_to_reference_atoms(
+    *,
+    expanded_structure: SymmetryExpandedStructure,
+    reference_atoms: Iterable[PreparedAtom],
+    padding: float,
+    translation_range: int = 1,
+) -> ArrayTrimmedCrystalBlock:
+    """
+    Translate symmetry-expanded atoms and keep only atoms inside padded bounds.
+    """
+
+    if padding < 0:
+        raise CrystalTrimError(f"padding must be non-negative, got {padding!r}.")
+
+    if type(translation_range) is not int or translation_range < 0:
+        raise CrystalTrimError(
+            "translation_range must be a non-negative integer, "
+            f"got {translation_range!r}."
+        )
+
+    expanded_atoms = tuple(expanded_structure.atoms)
+    if not expanded_atoms:
+        raise CrystalTrimError(
+            "Cannot trim an empty symmetry-expanded atom list."
+        )
+
+    reference_bounds = bounds_from_prepared_atoms(reference_atoms)
+    trim_bounds = expand_bounds(reference_bounds, padding)
+    vectors = unit_cell_translation_vectors(expanded_structure.unit_cell)
+
+    base_coordinates = np.asarray(
+        [(atom.x, atom.y, atom.z) for atom in expanded_atoms],
+        dtype=np.float64,
+    )
+    source_atom_indices = np.asarray(
+        [atom.source_atom_index for atom in expanded_atoms],
+        dtype=np.int64,
+    )
+    identity_flags = np.asarray(
+        [atom.is_identity_symmetry_operation for atom in expanded_atoms],
+        dtype=np.bool_,
+    )
+
+    coordinate_chunks: list[np.ndarray] = []
+    source_index_chunks: list[np.ndarray] = []
+    identity_flag_chunks: list[np.ndarray] = []
+    offset_chunks: list[np.ndarray] = []
+
+    for a_offset in range(-translation_range, translation_range + 1):
+        for b_offset in range(-translation_range, translation_range + 1):
+            for c_offset in range(-translation_range, translation_range + 1):
+                shift = translation_vector_for_offsets(
+                    vectors,
+                    a_offset=a_offset,
+                    b_offset=b_offset,
+                    c_offset=c_offset,
+                )
+                shifted_coordinates = base_coordinates + np.asarray(
+                    (shift.x, shift.y, shift.z),
+                    dtype=np.float64,
+                )
+                inside_bounds = (
+                    (trim_bounds.x_min <= shifted_coordinates[:, 0])
+                    & (shifted_coordinates[:, 0] <= trim_bounds.x_max)
+                    & (trim_bounds.y_min <= shifted_coordinates[:, 1])
+                    & (shifted_coordinates[:, 1] <= trim_bounds.y_max)
+                    & (trim_bounds.z_min <= shifted_coordinates[:, 2])
+                    & (shifted_coordinates[:, 2] <= trim_bounds.z_max)
+                )
+
+                retained_count = int(np.count_nonzero(inside_bounds))
+                if retained_count == 0:
+                    continue
+
+                coordinate_chunks.append(shifted_coordinates[inside_bounds])
+                source_index_chunks.append(source_atom_indices[inside_bounds])
+                identity_flag_chunks.append(identity_flags[inside_bounds])
+                offset_chunks.append(
+                    np.full(
+                        (retained_count, 3),
+                        (a_offset, b_offset, c_offset),
+                        dtype=np.int64,
+                    )
+                )
+
+    if not coordinate_chunks:
+        raise CrystalTrimError(
+            "Trimmed crystal block contains no atoms. Check unit-cell translation "
+            "and packing-density threshold."
+        )
+
+    translated_cell_count = (2 * translation_range + 1) ** 3
+
+    return ArrayTrimmedCrystalBlock(
+        coordinates=np.concatenate(coordinate_chunks, axis=0),
+        source_atom_indices=np.concatenate(source_index_chunks, axis=0),
+        is_identity_symmetry_operation=np.concatenate(identity_flag_chunks, axis=0),
+        translation_offsets=np.concatenate(offset_chunks, axis=0),
+        reference_bounds=reference_bounds,
+        trim_bounds=trim_bounds,
+        padding=float(padding),
+        original_atom_count=len(expanded_atoms) * translated_cell_count,
+        translation_vectors=vectors,
+        translation_range=translation_range,
+        source_unit_cell_atom_count=len(expanded_atoms),
     )
 
 
@@ -199,8 +376,11 @@ def translated_atom_is_inside_bounds(
 
 
 def trimmed_coordinates_as_tuples(
-    trimmed_block: TrimmedCrystalBlock,
+    trimmed_block: TrimmedNeighbourBlock,
 ) -> tuple[tuple[float, float, float], ...]:
     """Return only xyz coordinates from a trimmed crystal block."""
+
+    if isinstance(trimmed_block, ArrayTrimmedCrystalBlock):
+        return tuple(tuple(row) for row in trimmed_block.coordinates.tolist())
 
     return tuple((atom.x, atom.y, atom.z) for atom in trimmed_block.atoms)

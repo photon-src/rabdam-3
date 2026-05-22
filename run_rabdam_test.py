@@ -15,7 +15,7 @@ from bdamage.workflow import (
 )
 from crystal.symmetry import expand_prepared_structure_by_symmetry
 from crystal.translate import translate_expanded_unit_cell
-from crystal.trim import trim_translated_block_for_bdamage
+from crystal.trim import trim_expanded_unit_cell_for_bdamage
 from input.rcsb import ensure_local_structure_file
 from input.reader import read_structure
 from input.resolver import resolve_structure_input
@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         "--output-csv",
         default="rabdam3_BDamage.csv",
         help="Path for the per-atom RABDAM 3 BDamage CSV.",
+    )
+    parser.add_argument(
+        "--materialize-translated-block",
+        action="store_true",
+        help="Build the full legacy translated atom block for debugging.",
     )
     return parser.parse_args()
 
@@ -117,7 +122,9 @@ def write_bdamage_csv(
 
 def main() -> None:
     args = parse_args()
-    workflow_options = BDamageWorkflowOptions()
+    workflow_options = BDamageWorkflowOptions(
+        materialize_translated_block=args.materialize_translated_block,
+    )
     validate_workflow_options(workflow_options)
 
     resolved = run_stage(
@@ -158,19 +165,24 @@ def main() -> None:
         "Expanding crystallographic symmetry",
         lambda: expand_prepared_structure_by_symmetry(prepared_structure),
     )
-    translated_block = run_stage(
-        "Translating neighbouring unit cells",
-        lambda: translate_expanded_unit_cell(
-            symmetry_expanded_structure,
-            translation_range=workflow_options.translation_range,
-        ),
+    translated_block = (
+        run_stage(
+            "Translating neighbouring unit cells",
+            lambda: translate_expanded_unit_cell(
+                symmetry_expanded_structure,
+                translation_range=workflow_options.translation_range,
+            ),
+        )
+        if workflow_options.materialize_translated_block
+        else None
     )
     trimmed_block = run_stage(
-        "Trimming neighbour block",
-        lambda: trim_translated_block_for_bdamage(
-            translated_block=translated_block,
+        "Fused translating and trimming neighbour block",
+        lambda: trim_expanded_unit_cell_for_bdamage(
+            expanded_structure=symmetry_expanded_structure,
             prepared_structure=prepared_structure,
             padding=workflow_options.packing_density_threshold,
+            translation_range=workflow_options.translation_range,
         ),
     )
     packing_density_result = run_stage(
@@ -204,8 +216,9 @@ def main() -> None:
     print("Selected atoms:", prepared_structure.report.selected_atom_count)
     print("Window size:", window_size)
     print("Symmetry-expanded atoms:", len(symmetry_expanded_structure.atoms))
-    print("Translated atoms:", len(translated_block.atoms))
-    print("Trimmed neighbour atoms:", len(trimmed_block.atoms))
+    print("Translated atoms:", trimmed_block.original_atom_count)
+    print("Translated block materialized:", translated_block is not None)
+    print("Trimmed neighbour atoms:", trimmed_block.atom_count)
     print("Packing-density counts, first 10:")
     print(packing_density_counts_as_tuple(packing_density_result)[:10])
     print("BDamage scores, first 10:")

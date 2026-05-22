@@ -26,7 +26,10 @@ import math
 from bdamage.score import BDamageScoreResult, calculate_bdamage_scores_for_structure
 from crystal.symmetry import SymmetryExpandedStructure, expand_prepared_structure_by_symmetry
 from crystal.translate import TranslatedCrystalBlock, translate_expanded_unit_cell
-from crystal.trim import TrimmedCrystalBlock, trim_translated_block_for_bdamage
+from crystal.trim import (
+    TrimmedNeighbourBlock,
+    trim_expanded_unit_cell_for_bdamage,
+)
 from input.reader import StructureData
 from packing.density import PackingDensityResult, calculate_bdamage_packing_density
 from structure.models import PreparedStructure, StructurePreparationOptions
@@ -54,12 +57,17 @@ class BDamageWorkflowOptions:
     translation_range:
         Number of whole unit cells to translate in each direction.  The default
         of 1 generates offsets -1, 0, and +1 along a, b, and c.
+
+    materialize_translated_block:
+        Build the full legacy TranslatedCrystalBlock for debugging/reference
+        output.  The default fused path avoids this allocation.
     """
 
     packing_density_threshold: float = 7.0
     window_size_fraction: float = 0.02
     minimum_window_size: int = 11
     translation_range: int = 1
+    materialize_translated_block: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,10 +82,12 @@ class BDamageWorkflowResult:
         Full unit-cell atom cloud after applying crystallographic symmetry.
 
     translated_block:
-        Symmetry-expanded unit cell copied into neighbouring unit cells.
+        Symmetry-expanded unit cell copied into neighbouring unit cells, when
+        materialize_translated_block=True.  None on the default fast path.
 
     trimmed_block:
-        Local neighbour cloud retained for packing-density calculation.
+        Local neighbour cloud retained for packing-density calculation.  The
+        default workflow stores this as an array-backed block.
 
     packing_density_result:
         Per-selected-atom packing-density neighbour counts.
@@ -94,8 +104,8 @@ class BDamageWorkflowResult:
 
     prepared_structure: PreparedStructure
     symmetry_expanded_structure: SymmetryExpandedStructure
-    translated_block: TranslatedCrystalBlock
-    trimmed_block: TrimmedCrystalBlock
+    translated_block: TranslatedCrystalBlock | None
+    trimmed_block: TrimmedNeighbourBlock
     packing_density_result: PackingDensityResult
     bdamage_score_result: BDamageScoreResult
     options: BDamageWorkflowOptions
@@ -156,14 +166,19 @@ def calculate_bdamage_for_prepared_structure(
         )
 
     symmetry_expanded_structure = expand_prepared_structure_by_symmetry(prepared_structure)
-    translated_block = translate_expanded_unit_cell(
-        symmetry_expanded_structure,
-        translation_range=options.translation_range,
+    translated_block = (
+        translate_expanded_unit_cell(
+            symmetry_expanded_structure,
+            translation_range=options.translation_range,
+        )
+        if options.materialize_translated_block
+        else None
     )
-    trimmed_block = trim_translated_block_for_bdamage(
-        translated_block=translated_block,
+    trimmed_block = trim_expanded_unit_cell_for_bdamage(
+        expanded_structure=symmetry_expanded_structure,
         prepared_structure=prepared_structure,
         padding=options.packing_density_threshold,
+        translation_range=options.translation_range,
     )
     packing_density_result = calculate_bdamage_packing_density(
         prepared_structure=prepared_structure,
@@ -263,4 +278,10 @@ def validate_workflow_options(options: BDamageWorkflowOptions) -> None:
         raise BDamageWorkflowError(
             "translation_range must be a non-negative integer, "
             f"got {options.translation_range!r}."
+        )
+
+    if type(options.materialize_translated_block) is not bool:
+        raise BDamageWorkflowError(
+            "materialize_translated_block must be a boolean, "
+            f"got {options.materialize_translated_block!r}."
         )

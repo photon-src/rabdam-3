@@ -2,6 +2,8 @@ from pathlib import Path
 import math
 import unittest
 
+import numpy as np
+
 from crystal.symmetry import UnitCellParameters
 from crystal.translate import (
     CartesianVector,
@@ -9,7 +11,7 @@ from crystal.translate import (
     TranslatedCrystalBlock,
     UnitCellTranslationVectors,
 )
-from crystal.trim import CartesianBounds, TrimmedCrystalBlock
+from crystal.trim import ArrayTrimmedCrystalBlock, CartesianBounds, TrimmedCrystalBlock
 from input.reader import AtomRecord, StructureMetadata
 from input.resolver import StructureFileFormat
 from packing.density import (
@@ -126,6 +128,51 @@ def make_trimmed_block(atoms: tuple[TranslatedAtom, ...]) -> TrimmedCrystalBlock
         trim_bounds=bounds,
         padding=7.5,
         original_atom_count=len(atoms),
+    )
+
+
+def make_array_trimmed_block(atoms: tuple[TranslatedAtom, ...]) -> ArrayTrimmedCrystalBlock:
+    bounds = CartesianBounds(
+        x_min=-10.0,
+        x_max=10.0,
+        y_min=-10.0,
+        y_max=10.0,
+        z_min=-10.0,
+        z_max=10.0,
+    )
+    vectors = UnitCellTranslationVectors(
+        a=CartesianVector(10.0, 0.0, 0.0),
+        b=CartesianVector(0.0, 20.0, 0.0),
+        c=CartesianVector(0.0, 0.0, 30.0),
+    )
+
+    return ArrayTrimmedCrystalBlock(
+        coordinates=np.asarray(
+            [(atom.x, atom.y, atom.z) for atom in atoms],
+            dtype=np.float64,
+        ),
+        source_atom_indices=np.asarray(
+            [atom.source_atom_index for atom in atoms],
+            dtype=np.int64,
+        ),
+        is_identity_symmetry_operation=np.asarray(
+            [atom.is_identity_symmetry_operation for atom in atoms],
+            dtype=np.bool_,
+        ),
+        translation_offsets=np.asarray(
+            [
+                (atom.translation_a, atom.translation_b, atom.translation_c)
+                for atom in atoms
+            ],
+            dtype=np.int64,
+        ),
+        reference_bounds=bounds,
+        trim_bounds=bounds,
+        padding=7.5,
+        original_atom_count=len(atoms),
+        translation_vectors=vectors,
+        translation_range=1,
+        source_unit_cell_atom_count=len(atoms),
     )
 
 
@@ -326,6 +373,72 @@ class PackingDensityTests(unittest.TestCase):
         self.assertEqual(packing_density_counts_as_tuple(result), (1,))
         self.assertEqual(result.selected_atom_count, 1)
         self.assertEqual(result.neighbour_atom_count, 2)
+
+    def test_calculate_bdamage_packing_density_accepts_array_trimmed_block(self) -> None:
+        selected_atoms = (
+            make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
+            make_prepared_atom(source_atom_index=1, x=10.0, y=0.0, z=0.0),
+        )
+        prepared_structure = make_prepared_structure(selected_atoms)
+        atoms = (
+            make_translated_atom(
+                translated_atom_index=1,
+                source_atom_index=0,
+                x=0.0,
+                y=0.0,
+                z=0.0,
+            ),
+            make_translated_atom(translated_atom_index=2, x=2.0, y=2.0, z=0.0),
+            make_translated_atom(
+                translated_atom_index=3,
+                source_atom_index=1,
+                x=10.0,
+                y=0.0,
+                z=0.0,
+            ),
+            make_translated_atom(translated_atom_index=4, x=13.0, y=0.0, z=0.0),
+        )
+        object_result = calculate_bdamage_packing_density(
+            prepared_structure=prepared_structure,
+            trimmed_block=make_trimmed_block(atoms),
+            packing_density_threshold=5.0,
+        )
+
+        array_result = calculate_bdamage_packing_density(
+            prepared_structure=prepared_structure,
+            trimmed_block=make_array_trimmed_block(atoms),
+            packing_density_threshold=5.0,
+        )
+
+        self.assertEqual(
+            packing_density_counts_as_tuple(array_result),
+            packing_density_counts_as_tuple(object_result),
+        )
+        self.assertEqual(array_result.neighbour_atom_count, 4)
+
+    def test_array_packing_density_requires_counted_self_copy(self) -> None:
+        selected_atoms = (
+            make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
+        )
+        prepared_structure = make_prepared_structure(selected_atoms)
+        trimmed_block = make_array_trimmed_block(
+            (
+                make_translated_atom(
+                    translated_atom_index=1,
+                    source_atom_index=1,
+                    x=1.0,
+                    y=0.0,
+                    z=0.0,
+                ),
+            )
+        )
+
+        with self.assertRaisesRegex(PackingDensityError, "central-cell copy"):
+            calculate_bdamage_packing_density(
+                prepared_structure=prepared_structure,
+                trimmed_block=trimmed_block,
+                packing_density_threshold=5.0,
+            )
 
     def test_non_positive_threshold_raises(self) -> None:
         with self.assertRaises(PackingDensityError):

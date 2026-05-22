@@ -1,19 +1,28 @@
 from pathlib import Path
 import unittest
 
-from crystal.symmetry import UnitCellParameters
+import numpy as np
+
+from crystal.symmetry import (
+    SymmetryExpandedAtom,
+    SymmetryExpandedStructure,
+    UnitCellParameters,
+)
 from crystal.translate import (
     CartesianVector,
     TranslatedAtom,
     TranslatedCrystalBlock,
     UnitCellTranslationVectors,
+    translate_expanded_unit_cell,
 )
 from crystal.trim import (
+    ArrayTrimmedCrystalBlock,
     CartesianBounds,
     CrystalTrimError,
     bounds_from_prepared_atoms,
     expand_bounds,
     translated_atom_is_inside_bounds,
+    trim_expanded_unit_cell_to_reference_atoms,
     trim_translated_block_for_bdamage,
     trim_translated_block_to_reference_atoms,
     trimmed_coordinates_as_tuples,
@@ -109,7 +118,81 @@ def make_translated_block(atoms: tuple[TranslatedAtom, ...]) -> TranslatedCrysta
     )
 
 
+def make_expanded_structure(
+    *,
+    atoms: tuple[SymmetryExpandedAtom, ...],
+    unit_cell: UnitCellParameters | None = None,
+) -> SymmetryExpandedStructure:
+    return SymmetryExpandedStructure(
+        atoms=atoms,
+        unit_cell=unit_cell
+        or UnitCellParameters(
+            a=10.0,
+            b=20.0,
+            c=30.0,
+            alpha=90.0,
+            beta=90.0,
+            gamma=90.0,
+        ),
+        space_group_name="P 1",
+        operation_count=1,
+    )
+
+
+def make_expanded_atom(
+    *,
+    unit_cell_atom_index: int,
+    source_atom_index: int,
+    x: float,
+    y: float,
+    z: float,
+    symmetry_operation_index: int = 1,
+    symmetry_operation: str = "x,y,z",
+    is_identity_symmetry_operation: bool = True,
+) -> SymmetryExpandedAtom:
+    return SymmetryExpandedAtom(
+        unit_cell_atom_index=unit_cell_atom_index,
+        source_atom_index=source_atom_index,
+        symmetry_operation_index=symmetry_operation_index,
+        symmetry_operation=symmetry_operation,
+        is_identity_symmetry_operation=is_identity_symmetry_operation,
+        x=x,
+        y=y,
+        z=z,
+    )
+
+
 class CrystalTrimTests(unittest.TestCase):
+    def assert_fused_block_matches_legacy_block(
+        self,
+        *,
+        fused: ArrayTrimmedCrystalBlock,
+        legacy,
+    ) -> None:
+        self.assertEqual(fused.original_atom_count, legacy.original_atom_count)
+        self.assertEqual(fused.reference_bounds, legacy.reference_bounds)
+        self.assertEqual(fused.trim_bounds, legacy.trim_bounds)
+        self.assertEqual(fused.padding, legacy.padding)
+        self.assertEqual(
+            trimmed_coordinates_as_tuples(fused),
+            trimmed_coordinates_as_tuples(legacy),
+        )
+        self.assertEqual(
+            tuple(fused.source_atom_indices.tolist()),
+            tuple(atom.source_atom_index for atom in legacy.atoms),
+        )
+        self.assertEqual(
+            tuple(bool(flag) for flag in fused.is_identity_symmetry_operation.tolist()),
+            tuple(atom.is_identity_symmetry_operation for atom in legacy.atoms),
+        )
+        self.assertEqual(
+            tuple(tuple(row) for row in fused.translation_offsets.tolist()),
+            tuple(
+                (atom.translation_a, atom.translation_b, atom.translation_c)
+                for atom in legacy.atoms
+            ),
+        )
+
     def test_bounds_from_prepared_atoms(self) -> None:
         atoms = (
             make_prepared_atom(source_atom_index=0, x=1.0, y=4.0, z=-2.0),
@@ -274,6 +357,141 @@ class CrystalTrimTests(unittest.TestCase):
                 z_max=0.0,
             ),
         )
+
+    def test_fused_trim_matches_legacy_translate_then_trim_default_range(self) -> None:
+        expanded_structure = make_expanded_structure(
+            atoms=(
+                make_expanded_atom(
+                    unit_cell_atom_index=1,
+                    source_atom_index=0,
+                    x=1.0,
+                    y=2.0,
+                    z=3.0,
+                ),
+                make_expanded_atom(
+                    unit_cell_atom_index=2,
+                    source_atom_index=1,
+                    x=8.0,
+                    y=3.0,
+                    z=3.0,
+                    symmetry_operation_index=2,
+                    symmetry_operation="-x,y,z",
+                    is_identity_symmetry_operation=False,
+                ),
+                make_expanded_atom(
+                    unit_cell_atom_index=3,
+                    source_atom_index=2,
+                    x=-9.0,
+                    y=2.0,
+                    z=3.0,
+                ),
+            ),
+        )
+        reference_atoms = (
+            make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
+            make_prepared_atom(source_atom_index=1, x=10.0, y=5.0, z=5.0),
+        )
+        legacy = trim_translated_block_to_reference_atoms(
+            translated_block=translate_expanded_unit_cell(expanded_structure),
+            reference_atoms=reference_atoms,
+            padding=3.0,
+        )
+
+        fused = trim_expanded_unit_cell_to_reference_atoms(
+            expanded_structure=expanded_structure,
+            reference_atoms=reference_atoms,
+            padding=3.0,
+        )
+
+        self.assert_fused_block_matches_legacy_block(fused=fused, legacy=legacy)
+
+    def test_fused_trim_matches_legacy_for_translation_range_zero(self) -> None:
+        expanded_structure = make_expanded_structure(
+            atoms=(
+                make_expanded_atom(
+                    unit_cell_atom_index=1,
+                    source_atom_index=0,
+                    x=0.0,
+                    y=5.0,
+                    z=10.0,
+                ),
+                make_expanded_atom(
+                    unit_cell_atom_index=2,
+                    source_atom_index=1,
+                    x=11.0,
+                    y=5.0,
+                    z=10.0,
+                ),
+            ),
+        )
+        reference_atoms = (
+            make_prepared_atom(source_atom_index=0, x=0.0, y=0.0, z=0.0),
+            make_prepared_atom(source_atom_index=1, x=10.0, y=10.0, z=10.0),
+        )
+        legacy = trim_translated_block_to_reference_atoms(
+            translated_block=translate_expanded_unit_cell(
+                expanded_structure,
+                translation_range=0,
+            ),
+            reference_atoms=reference_atoms,
+            padding=0.0,
+        )
+
+        fused = trim_expanded_unit_cell_to_reference_atoms(
+            expanded_structure=expanded_structure,
+            reference_atoms=reference_atoms,
+            padding=0.0,
+            translation_range=0,
+        )
+
+        self.assert_fused_block_matches_legacy_block(fused=fused, legacy=legacy)
+        self.assertEqual(fused.atom_count, 1)
+        np.testing.assert_allclose(fused.coordinates[0], np.asarray((0.0, 5.0, 10.0)))
+
+    def test_fused_trim_matches_legacy_for_non_orthogonal_unit_cell(self) -> None:
+        expanded_structure = make_expanded_structure(
+            atoms=(
+                make_expanded_atom(
+                    unit_cell_atom_index=1,
+                    source_atom_index=0,
+                    x=1.0,
+                    y=2.0,
+                    z=3.0,
+                ),
+                make_expanded_atom(
+                    unit_cell_atom_index=2,
+                    source_atom_index=1,
+                    x=7.0,
+                    y=8.0,
+                    z=9.0,
+                ),
+            ),
+            unit_cell=UnitCellParameters(
+                a=10.0,
+                b=12.0,
+                c=14.0,
+                alpha=80.0,
+                beta=75.0,
+                gamma=70.0,
+            ),
+        )
+        reference_atoms = (
+            make_prepared_atom(source_atom_index=0, x=-5.0, y=-5.0, z=-5.0),
+            make_prepared_atom(source_atom_index=1, x=15.0, y=15.0, z=15.0),
+        )
+        legacy = trim_translated_block_to_reference_atoms(
+            translated_block=translate_expanded_unit_cell(expanded_structure),
+            reference_atoms=reference_atoms,
+            padding=2.0,
+        )
+
+        fused = trim_expanded_unit_cell_to_reference_atoms(
+            expanded_structure=expanded_structure,
+            reference_atoms=reference_atoms,
+            padding=2.0,
+        )
+
+        self.assert_fused_block_matches_legacy_block(fused=fused, legacy=legacy)
 
     def test_empty_reference_atoms_raises(self) -> None:
         with self.assertRaises(CrystalTrimError):
