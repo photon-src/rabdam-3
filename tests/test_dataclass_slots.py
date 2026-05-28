@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from bnet.metric import BnetResult
+from bnet.sites import BnetSite, ProteinBnetSiteSelection
 from bdamage.score import BDamageAtomInput, BDamageAtomResult, BDamageScoreResult
 from rabdam.workflow import BDamageWorkflowOptions, BDamageWorkflowResult
 from crystal.symmetry import (
@@ -214,9 +215,22 @@ class DataclassSlotsTests(unittest.TestCase):
             right_area=0.6,
             site_count=20,
         )
+        bnet_site = BnetSite(
+            source_atom_index=0,
+            bdamage_atom_index=1,
+            atom_serial=1,
+            chain_id="A",
+            residue_name="ASP",
+            residue_number=1,
+            insertion_code="",
+            atom_name="OD1",
+            bdamage=1.2,
+        )
 
         instances = (
             bnet_result,
+            bnet_site,
+            ProteinBnetSiteSelection(sites=(bnet_site,)),
             ResolvedStructureInput(
                 original_input="example.cif",
                 source_type=StructureSourceType.LOCAL_FILE,
