@@ -53,7 +53,7 @@ def calculate_bnet(
         BDamage values for Asp/Glu side-chain carboxyl oxygen atoms.
     trapezium_count
         Number of trapeziums used for numerical integration. The default uses
-        100 grid points and 99 trapeziums.
+        99 trapeziums, requiring 100 grid points.
 
     Returns
     -------
