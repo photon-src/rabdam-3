@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from bnet.metric import BnetResult
 from bdamage.score import BDamageAtomInput, BDamageAtomResult, BDamageScoreResult
 from rabdam.workflow import BDamageWorkflowOptions, BDamageWorkflowResult
 from crystal.symmetry import (
@@ -206,8 +207,16 @@ class DataclassSlotsTests(unittest.TestCase):
             selected_atom_count=1,
         )
         workflow_options = BDamageWorkflowOptions()
+        bnet_result = BnetResult(
+            bnet=1.5,
+            median_bdamage=1.0,
+            left_area=0.4,
+            right_area=0.6,
+            site_count=20,
+        )
 
         instances = (
+            bnet_result,
             ResolvedStructureInput(
                 original_input="example.cif",
                 source_type=StructureSourceType.LOCAL_FILE,
