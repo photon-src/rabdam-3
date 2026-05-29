@@ -44,7 +44,7 @@ class BnetEligibilityTests(unittest.TestCase):
         self.assertEqual(
             tuple(issue.reason for issue in result.issues),
             (
-                BnetEligibilityReason.RESOLUTION_TOO_LOW,
+                BnetEligibilityReason.RESOLUTION_WORSE_THAN_LIMIT,
                 BnetEligibilityReason.RFREE_TOO_HIGH,
                 BnetEligibilityReason.TEMPERATURE_OUTSIDE_CRYO_RANGE,
                 BnetEligibilityReason.TOO_FEW_ASP_GLU_CARBOXYL_OXYGENS,

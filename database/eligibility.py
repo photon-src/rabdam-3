@@ -24,7 +24,7 @@ class BnetEligibilityReason(str, Enum):
     ELIGIBLE = "eligible"
     MISSING_RESOLUTION = "missing_resolution"
     INVALID_RESOLUTION = "invalid_resolution"
-    RESOLUTION_TOO_LOW = "resolution_too_low"
+    RESOLUTION_WORSE_THAN_LIMIT = "resolution_worse_than_limit"
 
     MISSING_RFREE = "missing_rfree"
     INVALID_RFREE = "invalid_rfree"
@@ -134,7 +134,7 @@ def check_bnet_reference_eligibility(
     elif resolution > max_resolution_angstrom:
         issues.append(
             BnetEligibilityIssue(
-                BnetEligibilityReason.RESOLUTION_TOO_LOW,
+                BnetEligibilityReason.RESOLUTION_WORSE_THAN_LIMIT,
                 (
                     f"Resolution is {resolution:.3g} Å, which is worse than the "
                     f"{max_resolution_angstrom:.3g} Å Bnet reference database limit."
