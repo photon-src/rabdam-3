@@ -48,7 +48,12 @@ class PdbRedoStructureCheckError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class PdbRedoStructureChecks:
-    """Structural facts extracted from a PDB-REDO final mmCIF model."""
+    """Structural facts extracted from a PDB-REDO final mmCIF model.
+
+    ``has_nonflat_protein_b_factors`` is a heuristic guardrail based on
+    variation in protein atom B-factors. Prefer explicit PDB-REDO B-factor
+    model metadata when available.
+    """
 
     pdb_id: str
     has_protein: bool
@@ -57,7 +62,7 @@ class PdbRedoStructureChecks:
     asp_glu_carboxyl_oxygen_count: int
     asp_glu_residue_count: int
     asp_glu_residue_keys_with_occupancy_below_one: tuple[str, ...]
-    uses_per_atom_b_factors: bool
+    has_nonflat_protein_b_factors: bool
     atom_count: int
     non_hydrogen_atom_count: int
     protein_atom_count: int
@@ -135,7 +140,9 @@ def read_pdb_redo_structure_checks(
         asp_glu_residue_keys_with_occupancy_below_one=(
             asp_glu_info.residue_keys_with_occupancy_below_one
         ),
-        uses_per_atom_b_factors=b_factor_info.uses_per_atom_b_factors,
+        has_nonflat_protein_b_factors=(
+            b_factor_info.has_nonflat_protein_b_factors
+        ),
         atom_count=b_factor_info.atom_count,
         non_hydrogen_atom_count=b_factor_info.non_hydrogen_atom_count,
         protein_atom_count=b_factor_info.protein_atom_count,
@@ -153,7 +160,7 @@ class _AspGluInfo:
 
 @dataclass(frozen=True, slots=True)
 class _BFactorInfo:
-    uses_per_atom_b_factors: bool
+    has_nonflat_protein_b_factors: bool
     atom_count: int
     non_hydrogen_atom_count: int
     protein_atom_count: int
@@ -246,18 +253,20 @@ def _collect_b_factor_info(structure: gemmi.Structure) -> _BFactorInfo:
                         if not _is_hydrogen(atom):
                             protein_b_values.append(float(atom.b_iso))
 
-    uses_per_atom_b_factors = _looks_like_per_atom_b_factor_model(protein_b_values)
+    has_nonflat_protein_b_factors = _has_nonflat_protein_b_factors(
+        protein_b_values
+    )
 
     return _BFactorInfo(
-        uses_per_atom_b_factors=uses_per_atom_b_factors,
+        has_nonflat_protein_b_factors=has_nonflat_protein_b_factors,
         atom_count=atom_count,
         non_hydrogen_atom_count=non_hydrogen_atom_count,
         protein_atom_count=protein_atom_count,
     )
 
 
-def _looks_like_per_atom_b_factor_model(b_values: list[float]) -> bool:
-    """Heuristically determine whether B-factors vary at atom level.
+def _has_nonflat_protein_b_factors(b_values: list[float]) -> bool:
+    """Heuristically determine whether protein B-factors are non-flat.
 
     PDB-REDO records flat B-factor model information separately, but this
     structural check is useful as an independent guardrail. A truly flat or

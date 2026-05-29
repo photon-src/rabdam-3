@@ -126,7 +126,7 @@ class PdbRedoStructureChecksTests(unittest.TestCase):
         self.assertEqual(checks.atom_count, 24)
         self.assertEqual(checks.non_hydrogen_atom_count, 24)
         self.assertEqual(checks.protein_atom_count, 24)
-        self.assertTrue(checks.uses_per_atom_b_factors)
+        self.assertTrue(checks.has_nonflat_protein_b_factors)
         self.assertEqual(checks.warnings, ())
 
     def test_peptide_nucleic_acid_is_nucleic_acid_not_protein(self) -> None:
