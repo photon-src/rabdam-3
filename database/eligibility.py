@@ -1,4 +1,4 @@
-"""Eligibility checks for Bnet and Bnet-percentile workflows."""
+"""Eligibility checks for Bnet reference database workflows."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class BnetEligibilityIssue:
 
 @dataclass(frozen=True, slots=True)
 class BnetEligibilityResult:
-    """Result of checking Bnet-percentile eligibility."""
+    """Result of checking Bnet reference database eligibility."""
 
     is_eligible: bool
     issues: tuple[BnetEligibilityIssue, ...] = field(default_factory=tuple)
@@ -71,17 +71,17 @@ class BnetEligibilityResult:
         """Return the first failure message, or a success message."""
 
         if not self.issues:
-            return "Structure is eligible for Bnet-percentile calculation."
+            return "Structure is eligible for Bnet reference database inclusion."
         return self.issues[0].message
 
 
 @dataclass(frozen=True, slots=True)
 class BnetEligibilityContext:
-    """Inputs needed to assess generic Bnet-percentile eligibility.
+    """Inputs needed to assess Bnet reference database eligibility.
 
     This object deliberately avoids any PDB-REDO-specific fields. Database
-    builders can construct it from PDB-REDO metadata, mmCIF metadata, or normal
-    RABDAM 3 workflow outputs.
+    builders can construct it from PDB-REDO metadata, mmCIF metadata, or RABDAM
+    workflow outputs.
     """
 
     resolution_angstrom: float | None
@@ -93,7 +93,7 @@ class BnetEligibilityContext:
     bnet: float | None = None
 
 
-def check_bnet_percentile_eligibility(
+def check_bnet_reference_eligibility(
     context: BnetEligibilityContext,
     *,
     require_bnet: bool = True,
@@ -105,7 +105,7 @@ def check_bnet_percentile_eligibility(
         DEFAULT_MIN_ASP_GLU_CARBOXYL_OXYGEN_COUNT
     ),
 ) -> BnetEligibilityResult:
-    """Check whether a structure is eligible for Bnet-percentile calculation."""
+    """Check whether a structure is eligible for Bnet reference database inclusion."""
 
     issues: list[BnetEligibilityIssue] = []
 
@@ -131,7 +131,7 @@ def check_bnet_percentile_eligibility(
                 BnetEligibilityReason.RESOLUTION_TOO_LOW,
                 (
                     f"Resolution is {resolution:.3g} Å, which is worse than the "
-                    f"{max_resolution_angstrom:.3g} Å Bnet-percentile limit."
+                    f"{max_resolution_angstrom:.3g} Å Bnet reference database limit."
                 ),
                 resolution,
             )
@@ -159,7 +159,7 @@ def check_bnet_percentile_eligibility(
                 BnetEligibilityReason.RFREE_TOO_HIGH,
                 (
                     f"Rfree is {r_free:.3g}, which is above the "
-                    f"{max_r_free:.3g} Bnet-percentile limit."
+                    f"{max_r_free:.3g} Bnet reference database limit."
                 ),
                 r_free,
             )
@@ -188,7 +188,7 @@ def check_bnet_percentile_eligibility(
                 (
                     f"Collection temperature is {temperature:.3g} K, outside the "
                     f"{min_temperature_k:.3g}–{max_temperature_k:.3g} K "
-                    "Bnet-percentile reference range."
+                    "Bnet reference database range."
                 ),
                 temperature,
             )
@@ -200,7 +200,7 @@ def check_bnet_percentile_eligibility(
                 BnetEligibilityReason.TOO_FEW_ASP_GLU_CARBOXYL_OXYGENS,
                 (
                     "Too few Asp/Glu side-chain carboxyl oxygen atoms for "
-                    "Bnet-percentile calculation: "
+                    "Bnet reference database inclusion: "
                     f"{context.asp_glu_carboxyl_oxygen_count} found, "
                     f"{min_asp_glu_carboxyl_oxygen_count} required."
                 ),
@@ -276,5 +276,5 @@ __all__ = [
     "DEFAULT_MAX_TEMPERATURE_K",
     "DEFAULT_MIN_ASP_GLU_CARBOXYL_OXYGEN_COUNT",
     "DEFAULT_MIN_TEMPERATURE_K",
-    "check_bnet_percentile_eligibility",
+    "check_bnet_reference_eligibility",
 ]

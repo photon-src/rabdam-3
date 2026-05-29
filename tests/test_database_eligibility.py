@@ -3,7 +3,7 @@ import unittest
 from database.eligibility import (
     BnetEligibilityContext,
     BnetEligibilityReason,
-    check_bnet_percentile_eligibility,
+    check_bnet_reference_eligibility,
 )
 
 
@@ -21,7 +21,7 @@ def make_eligible_context() -> BnetEligibilityContext:
 
 class BnetEligibilityTests(unittest.TestCase):
     def test_accepts_eligible_context(self) -> None:
-        result = check_bnet_percentile_eligibility(make_eligible_context())
+        result = check_bnet_reference_eligibility(make_eligible_context())
 
         self.assertTrue(result.is_eligible)
         self.assertEqual(result.issues, ())
@@ -38,7 +38,7 @@ class BnetEligibilityTests(unittest.TestCase):
             bnet=None,
         )
 
-        result = check_bnet_percentile_eligibility(context)
+        result = check_bnet_reference_eligibility(context)
 
         self.assertFalse(result.is_eligible)
         self.assertEqual(
@@ -65,7 +65,7 @@ class BnetEligibilityTests(unittest.TestCase):
             bnet=object(),  # type: ignore[arg-type]
         )
 
-        result = check_bnet_percentile_eligibility(context)
+        result = check_bnet_reference_eligibility(context)
 
         self.assertFalse(result.is_eligible)
         self.assertEqual(
@@ -92,7 +92,7 @@ class BnetEligibilityTests(unittest.TestCase):
             bnet=None,
         )
 
-        result = check_bnet_percentile_eligibility(
+        result = check_bnet_reference_eligibility(
             context_without_bnet,
             require_bnet=False,
         )
