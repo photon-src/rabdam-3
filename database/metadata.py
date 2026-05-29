@@ -106,27 +106,51 @@ def read_pdb_redo_metadata(
             warnings.append(f"Could not read mmCIF fallback metadata: {error}")
 
     resolution = _first_float(
-        _json_values_by_alias(data, _RESOLUTION_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _RESOLUTION_JSON_PATHS,
+            _RESOLUTION_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _RESOLUTION_CIF_TAGS),
     )
     r_work = _first_float(
-        _json_values_by_alias(data, _R_WORK_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _R_WORK_JSON_PATHS,
+            _R_WORK_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _R_WORK_CIF_TAGS),
     )
     r_free = _first_float(
-        _json_values_by_alias(data, _R_FREE_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _R_FREE_JSON_PATHS,
+            _R_FREE_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _R_FREE_CIF_TAGS),
     )
     temperature = _first_float(
-        _json_values_by_alias(data, _TEMPERATURE_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _TEMPERATURE_JSON_PATHS,
+            _TEMPERATURE_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _TEMPERATURE_CIF_TAGS),
     )
     wilson_b = _first_float(
-        _json_values_by_alias(data, _WILSON_B_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _WILSON_B_JSON_PATHS,
+            _WILSON_B_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _WILSON_B_CIF_TAGS),
     )
     b_factor_restraint_weight = _first_float(
-        _json_values_by_alias(data, _B_FACTOR_RESTRAINT_JSON_ALIASES),
+        _json_values_by_path_or_alias(
+            data,
+            _B_FACTOR_RESTRAINT_JSON_PATHS,
+            _B_FACTOR_RESTRAINT_JSON_ALIASES,
+        ),
         _cif_values_by_tag(cif_values, _B_FACTOR_RESTRAINT_CIF_TAGS),
     )
 
@@ -187,6 +211,38 @@ def _read_mmcif_scalar_values(path: Path) -> dict[str, str]:
             values[tag.casefold()] = _strip_cif_quotes(value)
 
     return values
+
+
+def _json_values_by_path_or_alias(
+    data: Mapping[str, Any],
+    paths: frozenset[tuple[str, ...]],
+    aliases: frozenset[str],
+) -> tuple[_RawMetadataValue, ...]:
+    path_matches = _json_values_by_path(data, paths)
+    if path_matches:
+        return path_matches
+    return _json_values_by_alias(data, aliases)
+
+
+def _json_values_by_path(
+    data: Mapping[str, Any],
+    paths: frozenset[tuple[str, ...]],
+) -> tuple[_RawMetadataValue, ...]:
+    normalized_paths = frozenset(_normalize_path(path) for path in paths)
+    matches: list[_RawMetadataValue] = []
+
+    for key_path, value in _walk_json_values(data):
+        normalized_key_path = _normalize_path(key_path)
+        if normalized_key_path in normalized_paths:
+            joined_source_path = ".".join(str(part) for part in key_path)
+            matches.append(
+                _RawMetadataValue(
+                    value=value,
+                    source=f"data_json:{joined_source_path}",
+                )
+            )
+
+    return tuple(matches)
 
 
 def _json_values_by_alias(
@@ -284,6 +340,17 @@ def _normalize_name(value: str) -> str:
     return "".join(character for character in value.casefold() if character.isalnum())
 
 
+def _normalize_path(path: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(_normalize_name(part) for part in path)
+
+
+_RESOLUTION_JSON_PATHS = frozenset(
+    {
+        ("refine", "ls_d_res_high"),
+        ("reflns", "d_resolution_high"),
+    }
+)
+
 _RESOLUTION_JSON_ALIASES = frozenset(
     {
         "resolution",
@@ -292,6 +359,14 @@ _RESOLUTION_JSON_ALIASES = frozenset(
         "dresolutionhigh",
         "highresolution",
         "refinelsdreshigh",
+    }
+)
+
+_R_WORK_JSON_PATHS = frozenset(
+    {
+        ("refine", "ls_r_factor_r_work"),
+        ("refine", "ls_r_factor_obs"),
+        ("refine", "ls_r_factor_all"),
     }
 )
 
@@ -305,6 +380,12 @@ _R_WORK_JSON_ALIASES = frozenset(
     }
 )
 
+_R_FREE_JSON_PATHS = frozenset(
+    {
+        ("refine", "ls_r_factor_r_free"),
+    }
+)
+
 _R_FREE_JSON_ALIASES = frozenset(
     {
         "rfree",
@@ -312,6 +393,13 @@ _R_FREE_JSON_ALIASES = frozenset(
         "rfactorfree",
         "rvaluefree",
         "refinelsrfactorrfree",
+    }
+)
+
+_TEMPERATURE_JSON_PATHS = frozenset(
+    {
+        ("diffrn", "ambient_temp"),
+        ("exptl_crystal_grow", "temp"),
     }
 )
 
@@ -326,6 +414,12 @@ _TEMPERATURE_JSON_ALIASES = frozenset(
     }
 )
 
+_WILSON_B_JSON_PATHS = frozenset(
+    {
+        ("reflns", "b_iso_wilson_estimate"),
+    }
+)
+
 _WILSON_B_JSON_ALIASES = frozenset(
     {
         "wilsonb",
@@ -333,6 +427,12 @@ _WILSON_B_JSON_ALIASES = frozenset(
         "wilsonbestimate",
         "bisowilsonestimate",
         "reflnsbisowilsonestimate",
+    }
+)
+
+_B_FACTOR_RESTRAINT_JSON_PATHS = frozenset(
+    {
+        ("refine", "pdbx_adp_restraints_weight"),
     }
 )
 

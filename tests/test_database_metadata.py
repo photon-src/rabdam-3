@@ -97,6 +97,35 @@ class PdbRedoMetadataTests(unittest.TestCase):
         )
         self.assertEqual(metadata.warnings, ())
 
+    def test_exact_data_json_paths_take_priority_over_broad_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            candidate = write_candidate_files(
+                Path(temp_dir),
+                data={
+                    "screening": {
+                        "resolution": "9.9",
+                        "rfree": "0.99",
+                    },
+                    "refine": {
+                        "ls_d_res_high": "1.4",
+                        "ls_R_factor_R_free": "0.24",
+                    },
+                },
+            )
+
+            metadata = read_pdb_redo_metadata(candidate)
+
+        self.assertEqual(metadata.resolution_angstrom, 1.4)
+        self.assertEqual(metadata.r_free, 0.24)
+        self.assertEqual(
+            metadata.resolution_source,
+            "data_json:refine.ls_d_res_high",
+        )
+        self.assertEqual(
+            metadata.r_free_source,
+            "data_json:refine.ls_R_factor_R_free",
+        )
+
     def test_uses_mmcif_fallback_for_missing_json_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             candidate = write_candidate_files(
