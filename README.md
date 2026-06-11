@@ -2,8 +2,8 @@
 
 RABDAM custom calculates per-atom BDamage scores, raw protein Bnet, and
 Bnet-percentile for protein crystal structures. It is a from-scratch
-implementation of the RABDAM 2 workflow created by the Garman Group at 
-the University of Oxford
+implementation of RABDAM 2 created by the Garman Group at 
+the University of Oxford (https://github.com/GarmanGroup/RABDAM).
 
 Use this near the end of refinement, or on deposited models, where per-atom
 B-factors are meaningful.
